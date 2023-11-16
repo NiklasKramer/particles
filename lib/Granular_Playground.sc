@@ -4,57 +4,76 @@ SynthDef(\input, {
 	arg out=0, amp=0.5, inchan=0;
 	var signal;
 	signal = SoundIn.ar(inchan);
-	Poll.ar(Impulse.ar(1), signal, label: "Signal Amplitude");
+	// Poll.ar(Impulse.ar(1), signal, label: "Signal Amplitude");
 	signal = signal * amp;
 	Out.ar(out, signal);
 }).add;
-
 
 SynthDef(\rec, {
 	arg micIn=0, buf=0, pointerIn=0;
 	var sig, pointer;
 	sig = In.ar(micIn, 1);
 	pointer = In.ar(pointerIn, 1);
+	// Poll.ar(Impulse.ar(10), pointer, "Pointer In Rec");
+	
+	
 	BufWr.ar(sig, buf, pointer);
 }).add;
 
+SynthDef(\pointer, {
+	arg out=0, buf=0;
+	var signal;
+	signal = Phasor.ar(0,BufRateScale.kr(buf), 0, BufFrames.kr(buf));
+	Out.ar(out, signal);
+}).add;
+
 SynthDef(\bufGrain, {
-    arg out, sndbuf, rate=1, dur=1, pos=0.0, dens=10, amp=0.7, release=0.5, jitter=1, gate=1, envbuf=(-1), phasorFreq=0.5, triggerType=0, ptrBus=0;
-    var sound, leveled, outputEnv, posModulation, triggerSignal, ptrValue, checkPosition, isEqual, tolerance;
-
-    ptrValue = In.kr(ptrBus);
-
-    // Define a tolerance for comparison
-    tolerance = 0.1; 
-
-    // Modulate position with jitter
-    posModulation = pos + (LFNoise1.kr([1,1]) * jitter);
-    posModulation = posModulation.clip(0.01, 1);
-
-    // Check if posModulation and ptrValue are approximately equal
-    isEqual = (posModulation - ptrValue).abs() < tolerance;
-
-    // If they are equal, adjust posModulation, otherwise leave it as is
-    posModulation = Select.kr(isEqual, [posModulation + 0.05, posModulation]);
-
-    // Choose between Dust and Impulse based on triggerType
-    triggerSignal = Select.ar(triggerType, [[Dust.ar(dens), Dust.ar(dens)], [Impulse.ar(dens), Impulse.ar(dens)]]);
-
-    sound = GrainBuf.ar(
-        numChannels: 2,
-        trigger: triggerSignal,
-        dur: [dur, dur - 0.01],
-        sndbuf: sndbuf,
-        rate: rate,
-        pos: posModulation,
-        interp: 2,
-        pan: 0,
-        envbufnum: envbuf,
-    );
-
-    outputEnv = EnvGen.ar(Env.adsr(releaseTime: release), gate: gate, doneAction: 2);
-    leveled = sound * outputEnv * amp;
-    Out.ar(out, leveled);
+	arg out, sndbuf, rate=1, dur=1, pos=0.0, dens=10, amp=0.7, release=0.5, jitter=1, gate=1, envbuf=(-1), phasorFreq=0.5, triggerType=0, pointerIn=0;
+	var sound, leveled, outputEnv, posModulation, triggerSignal, ptrValue, checkPosition, isEqual, tolerance;
+	
+	// Poll.ar(Impulse.ar(10), pointer, "Pointer In Grain");
+	
+	ptrValue = In.ar(pointerIn, 1)/BufFrames.kr(sndbuf);
+	
+	
+	
+	
+	// Define a tolerance for comparison
+	tolerance = 0.1; 
+	
+	// Modulate position with jitter
+	posModulation = pos + (LFNoise1.kr([1,1]) * jitter);
+	posModulation = posModulation.clip(0, 1);
+	
+	// Check if posModulation and ptrValue are approximately equal
+	isEqual = (posModulation - ptrValue).abs() < tolerance;
+	Poll.ar(Impulse.ar(15), isEqual, "isEqual");
+	
+	
+	// If they are equal, adjust posModulation, otherwise leave it as is
+	posModulation = Select.kr(isEqual, [posModulation + 0.01, posModulation]);
+	
+	// Choose between Dust and Impulse based on triggerType
+	triggerSignal = Select.ar(triggerType, [[Dust.ar(dens), Dust.ar(dens)], [Impulse.ar(dens), Impulse.ar(dens)]]);
+	
+	Poll.ar(Impulse.ar(15), posModulation, "posModulation");
+	Poll.ar(Impulse.ar(15), ptrValue, "Pointer In Grain");
+	
+	sound = GrainBuf.ar(
+		numChannels: 2,
+		trigger: triggerSignal,
+		dur: [dur, dur - 0.01],
+		sndbuf: sndbuf,
+		rate: rate,
+		pos: posModulation,
+		interp: 2,
+		pan: 0,
+		envbufnum: envbuf,
+	);
+	
+	outputEnv = EnvGen.ar(Env.adsr(releaseTime: release), gate: gate, doneAction: 2);
+	leveled = sound * outputEnv * amp;
+	Out.ar(out, leveled);
 }).add;
 
 
@@ -87,14 +106,6 @@ SynthDef(\wobble, {|in = 0, out = 0, rate = 0.2, maxDelay = 0.1, minDelay = 0.05
 	
 	// send to output
 	Out.ar(out, signal * amp);
-}).add;
-
-
-SynthDef(\pointer, {
-	arg out=0, buf=0;
-	var signal;
-	signal = Phasor.ar(0,BufRateScale.kr(buf), 0, BufFrames.kr(buf));
-	Out.ar(out, signal);
 }).add;
 
 
@@ -185,7 +196,7 @@ var input, record, soundGood, wobble, vme, grain, pointer;
 ~grnGroup = Group.after(~recGroup);
 
 
-pointer = Synth.new(\pointer,[\out, ~ptrBus, \buf, b]);
+
 input = Synth.new(\input, [\inchan, 0, \out, ~inputBus], ~inputGroup);  //
 record = Synth.new(\rec,[\micIn, ~inputBus, \buf, b, \pointerIn, ~ptrBus], ~recGroup);
 
@@ -194,10 +205,12 @@ soundGood = Synth(\soundGood,[\in, ~fx3Bus, \out, 0]);
 wobble = Synth(\wobble,[\in: ~fx2Bus, out: ~fx3Bus ]);
 vme = Synth(\vintageSamplerEmu,[\in: ~fx1Bus, out:~fx2Bus ]);
 
-grain = Synth.new(\bufGrain, [ \rate, 1, \sndbuf, b, \out, ~fx1Bus, \amp, 1, \ptrBus, ~ptrBus]);
+grain = Synth.new(\bufGrain, [ \rate, 1, \sndbuf, b, \out, 0, \amp, 1, \pointerIn, ~ptrBus]);
+pointer = Synth.new(\pointer,[\out, ~ptrBus, \buf, b]);
+grain.set(\dens, 5);
+grain.set(\amp, 5);
 
 )
 
-// grain.set(\dur, 0.1);
 
 
