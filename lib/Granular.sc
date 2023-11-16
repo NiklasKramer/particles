@@ -1,4 +1,5 @@
 Granular {
+	classvar b;
 
 	// instantiate variables here
 	var <effect, <grain, <passthrough, <inputBus, <ptrBus, <fxBus, <inputGroup, <ptrGroup, <recGroup, <grnGroup, <fxGroup, <input, <record, <soundGood, <wobble, <vme, <grain;
@@ -16,12 +17,14 @@ Granular {
 
 			// we need to make sure the server is running before asking it to do anything
 			s.waitForBoot {
+				b = Buffer.alloc(s, s.sampleRate * 1, numChannels: 1);
+
 
 				SynthDef(\input, {
 					arg out=0, amp=0.5, inchan=0;
 					var signal;
 					signal = SoundIn.ar(inchan);
-					Poll.ar(Impulse.ar(1), signal, label: "Signal Amplitude");
+					// Poll.ar(Impulse.ar(1), signal, label: "Signal Amplitude");
 					signal = signal * amp;
 					Out.ar(out, signal);
 				}).add;
@@ -84,10 +87,7 @@ Granular {
 						Clip.kr(distanceToEnd / (fadeTime * bufRate), 0, 1)
 					);
 
-					// Apply the fade envelope to the signal
 					sig = sig * fadeEnv;
-
-					// Poll.ar(Impulse.ar(1), sig, label: "Signal Amplitude");
 
 					BufWr.ar(sig, buf, pos);
 				}).add;
@@ -205,7 +205,6 @@ Granular {
 
 	init {
 		var s = Server.default;
-		var b = Buffer.alloc(s, s.sampleRate * 2, numChannels: 1);
 
 		~inputBus=Bus.audio(s,1);
 		~ptrBus=Bus.audio(s,1);

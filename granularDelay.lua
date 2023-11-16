@@ -81,12 +81,14 @@ function redraw()
   screen.move(64, 32)
   screen.level(15)
   screen.font_size(17)
-  screen.text_center('amp: ' .. params:string('amp'))
+  screen.text_center('GRANULAR')
+
+  -- screen.text_center('amp: ' .. params:string('amp'))
   screen.update()
 end
 
 function enc(n, d)
-  params:delta('eng_amp', d)
+-- params:delta('eng_amp', d)
   screen_dirty = true
 end
 
