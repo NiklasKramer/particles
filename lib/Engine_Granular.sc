@@ -13,6 +13,11 @@ Engine_Granular : CroneEngine {
 			kernel.setGate(gate);
 		});
 
+		this.addCommand(\buffer, "f", { arg msg;
+			var buffer = msg[1].asFloat;
+			kernel.setBuffer(buffer);
+		});
+
 		this.addCommand(\rate, "f", { arg msg;
 			var rate = msg[1].asFloat;
 			kernel.setRate(rate);

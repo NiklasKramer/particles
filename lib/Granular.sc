@@ -1,8 +1,8 @@
 Granular {
-	classvar b;
+	classvar a,b,c,d,e,f, allBuffers;
 
 	// instantiate variables here
-	var <effect, <grain, <passthrough, <inputBus, <ptrBus, <fxBus, <inputGroup, <ptrGroup, <recGroup, <grnGroup, <fxGroup, <input, <record, <soundGood, <wobble, <vme, <grain;
+	var <grain, <inputBus, <ptrBus, <fxBus, <inputGroup, <ptrGroup, <recGroup, <grnGroup, <fxGroup, <input, <record, <soundGood, <wobble, <vme, <grain, <pointer;
 	// we want 'passthrough' to be accessible any time we instantiate this class,
 	// so we prepend it with '<', to turn it into a 'getter' method.
 	// see 'Getters and Setters' at https://doc.sccode.org/Guides/WritingClasses.html for more info.
@@ -17,7 +17,14 @@ Granular {
 
 			// we need to make sure the server is running before asking it to do anything
 			s.waitForBoot {
+				a = Buffer.alloc(s, s.sampleRate * 0.5, numChannels: 1);
 				b = Buffer.alloc(s, s.sampleRate * 1, numChannels: 1);
+				c = Buffer.alloc(s, s.sampleRate * 2, numChannels: 1);
+				d = Buffer.alloc(s, s.sampleRate * 4, numChannels: 1);
+				e = Buffer.alloc(s, s.sampleRate * 8, numChannels: 1);
+				f = Buffer.alloc(s, s.sampleRate * 16, numChannels: 1);
+
+				allBuffers = [a,b,c,d,e,f];
 
 
 				SynthDef(\input, {
@@ -27,7 +34,23 @@ Granular {
 					// Poll.ar(Impulse.ar(1), signal, label: "Signal Amplitude");
 					signal = signal * amp;
 					Out.ar(out, signal);
-				}).add;
+					}).add;
+
+				SynthDef(\rec, {
+					arg micIn=0, buf=0, pointerIn=0;
+					var sig, pointer;
+					sig = In.ar(micIn, 1);
+					pointer = In.ar(pointerIn, 1);
+					// Poll.ar(Impulse.ar(10), pointer, "Pointer In Rec");
+					BufWr.ar(sig, buf, pointer);
+					}).add;
+
+				SynthDef(\pointer, {
+					arg out=0, buf=0;
+					var signal;
+					signal = Phasor.ar(0,BufRateScale.kr(buf), 0, BufFrames.kr(buf));
+					Out.ar(out, signal);
+					}).add;
 
 
 
@@ -64,56 +87,36 @@ Granular {
 				}).add;
 
 
-				SynthDef(\rec, {
-					arg micIn=0, buf=0, fadeTime=1;
-					var sig, pos, fadeEnv, distanceToStart, distanceToEnd, bufFrames, bufRate;
-
-					sig = In.ar(micIn, 1);
-
-					// Get the buffer's total frames and rate scale
-					bufFrames = BufFrames.kr(buf);
-					bufRate = BufRateScale.kr(buf);
-
-					// Current position from the Phasor
-					pos = Phasor.ar(0, bufRate, 0, bufFrames);
-
-					// Calculate the distance from the current position to the start and end of the buffer
-					distanceToStart = pos;
-					distanceToEnd = bufFrames - pos;
-
-					// Create a fade envelope based on distance to start and end
-					fadeEnv = min(
-						Clip.kr(distanceToStart / (fadeTime * bufRate), 0, 1),
-						Clip.kr(distanceToEnd / (fadeTime * bufRate), 0, 1)
-					);
-
-					sig = sig * fadeEnv;
-
-					BufWr.ar(sig, buf, pos);
-				}).add;
-
-
 				// BufGrain
 				SynthDef(\bufGrain, {
-					arg out, sndbuf, rate=1, dur=1, pos=0.0, dens=10, amp=0.7, release=0.5, jitter=1, gate=1, envbuf=(-1), phasorFreq=0.5, triggerType=0;
-					var sound, leveled, outputEnv, posModulation, phasor, triggerSignal;
+					arg out, sndbuf, rate=1, dur=1, pos=0.0, dens=10, amp=0.7, release=0.5, jitter=1, gate=1, envbuf=(-1), phasorFreq=0.5, triggerType=0, pointerIn=0;
+					var sound, leveled, outputEnv, posModulation, triggerSignal, ptrValue, checkPosition, isEqual, tolerance;
 
-					// Generate a phasor signal that ramps from 0 to buffer's duration at phasorFreq rate
-					phasor = Phasor.ar(0, phasorFreq / BufDur.kr(sndbuf), 0, 1);
+					// Poll.ar(Impulse.ar(10), pointer, "Pointer In Grain");
 
-					// Modulate position with jitter and phasor
-					posModulation = pos + phasor;
+					ptrValue = In.ar(pointerIn, 1)/BufFrames.kr(sndbuf);
 
-					// posModulation = posModulation.wrap(0, 1); // use wrap instead of clip to keep the modulation continuous
+					// Define a tolerance for comparison
+					tolerance = 0.2;
+
+					// Modulate position with jitter
 					posModulation = pos + (LFNoise1.kr([1,1]) * jitter);
-					posModulation = posModulation.clip(0.01, 1);
+					posModulation = posModulation.clip(0, 1);
 
+					// Check if posModulation and ptrValue are approximately equal
+					isEqual = (posModulation - ptrValue).abs() < tolerance;
+					// Poll.ar(Impulse.ar(15), isEqual, "isEqual");
+
+
+					// If they are equal, adjust posModulation, otherwise leave it as is
+					posModulation = Select.kr(isEqual, [posModulation + tolerance, posModulation]);
+					posModulation = posModulation.clip(0, 1);
 
 					// Choose between Dust and Impulse based on triggerType
-					triggerSignal = Select.ar(triggerType, [
-						[Dust.ar(dens), Dust.ar(dens)], // If triggerType is 0
-						[Impulse.ar(dens), Impulse.ar(dens)] // If triggerType is 1
-					]);
+					triggerSignal = Select.ar(triggerType, [[Dust.ar(dens), Dust.ar(dens)], [Impulse.ar(dens), Impulse.ar(dens)]]);
+
+					// Poll.ar(Impulse.ar(15), posModulation, "posModulation");
+					// Poll.ar(Impulse.ar(15), ptrValue, "Pointer In Grain");
 
 					sound = GrainBuf.ar(
 						numChannels: 2,
@@ -219,19 +222,20 @@ Granular {
 		~grnGroup = Group.after(~recGroup);
 
 
-		// ~winenv = Env.adsr(attackTime: 0, decayTime: 0.01, sustainLevel: 0.00, releaseTime: 0.0);
-		// ~z = Buffer.sendCollection(s, ~winenv.asArray, 1);
-
 
 		input = Synth.new(\input, [\inchan, 0, \out, ~inputBus], ~inputGroup);  //
-		record = Synth.new(\rec,[\micIn, ~inputBus, \buf, b], ~recGroup);
+		record = Synth.new(\rec,[\micIn, ~inputBus, \buf, b, \pointerIn, ~ptrBus], ~recGroup);
+
+	// ~winenv = Env.adsr(attackTime: 0, decayTime: 0.01, sustainLevel: 0.00, releaseTime: 0.0);
+		// ~z = Buffer.sendCollection(s, ~winenv.asArray, 1);
 
 		soundGood = Synth(\soundGood,[\in, ~fx3Bus, \out, 0]);
 		wobble = Synth(\wobble,[\in: ~fx2Bus, out: ~fx3Bus ]);
 		vme = Synth(\vintageSamplerEmu,[\in: ~fx1Bus, out:~fx2Bus ]);
 
-		grain = Synth.new(\bufGrain, [ \rate, 1, \sndbuf, b, \out, ~fx1Bus, \amp, 1]);
-
+		grain = Synth.new(\bufGrain, [ \rate, 1, \sndbuf, b, \out, ~fx1Bus, \amp, 1, \pointerIn, ~ptrBus]);
+		pointer = Synth.new(\pointer,[\out, ~ptrBus, \buf, b]);
+		
 		s.sync; // sync the changes above to the server
 	}
 
@@ -242,12 +246,24 @@ Granular {
 		grain.set(\gate, gate);
 	}
 
+
+	setBuffer { arg bufferNumber;
+		var buffer = allBuffers[bufferNumber];
+		grain.set(\sndbuf, buffer);
+		record.set(\buf, buffer);
+		pointer.set(\buf, buffer);
+	}
+
 	setRate { arg rate;
 		grain.set(\rate, rate);
 	}
 
 	setPos { arg pos;
 		grain.set(\pos, pos);
+	}
+
+	setAmp { arg amp;
+		grain.set(\amp, amp);
 	}
 
 	setDur { arg dur;
@@ -285,10 +301,6 @@ Granular {
 	setMix { arg mix;
 		wobble.set(\mix, mix);
 	}
-
-	setAmp { arg amp;
-		effect.set(\amp, amp);
-	}
 	setVMEBitDepth { arg bitDepth;
 		vme.set(\bitDepth, bitDepth);
 	}
@@ -318,12 +330,34 @@ Granular {
 		record.free;
 		input.free;
 		soundGood.free;
-		// b.free; // Assuming 'b' is a buffer that should be freed
+		pointer.free;
+		
+		a.free; 
+		b.free; 
+		c.free; 
+		d.free;
+		e.free; 
+		f.free; 
+
 		~inputBus.free;
 		~ptrBus.free;
 		~fx1Bus.free;
 		~fx2Bus.free;
 		~fx3Bus.free;
+
+		~inputGroup.free;
+		~ptrGroup.free;
+		~recGroup.free; 
+		~grnGroup.free;
+
+		~midside.free;
+
+
+		grain = nil; wobble = nil; vme = nil;
+    	record = nil; input = nil; soundGood = nil; pointer = nil;
+    	a = nil; b = nil; c = nil; d = nil; e = nil; f = nil;
+    	~inputBus = nil; ~ptrBus = nil; ~fx1Bus = nil; ~fx2Bus = nil; ~fx3Bus = nil;
+    	~inputGroup = nil; ~ptrGroup = nil; ~recGroup = nil; ~grnGroup = nil;
 	}
 
 }
