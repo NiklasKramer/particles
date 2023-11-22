@@ -5,7 +5,6 @@ a = arc.connect()
 
 local FRAMES_PER_SECOND = 120
 local pre_init_monitor_level;
-
 local total_screens = 4
 
 
@@ -27,9 +26,8 @@ function init_timers()
   particle_timer = metro.init(
     function()
       system:addParticle(64, 32)
-      redraw()
-      screen_dirty = false
-    end, 1 / FRAMES_PER_SECOND)
+      screen_dirty = true
+    end, 1 / (FRAMES_PER_SECOND/ 4))
   particle_timer:start()
 
   redraw_timer = metro.init(
@@ -162,7 +160,6 @@ function enc(n, d)
   end
 
   screen_dirty = true -- Flag to redraw the screen
-  drawParamValues()   -- Call drawParamValues to update the display with the new parameter values
 end
 
 function button_pressed(button)
@@ -281,7 +278,6 @@ end
 
 function cleanup()
   params:set('monitor_level', pre_init_monitor_level) -- restore 'monitor' level
-  engine.free();
 end
 
 
@@ -339,7 +335,6 @@ function a.delta(n, d)
 
   -- Update display and arc LEDs
   screen_dirty = true
-  -- update_arc_display()
 end
 
 function update_arc_display()
@@ -488,13 +483,6 @@ function display_exponential_pattern(encoder, value, min, max)
       end
   end
 end
-
-
-
-
-
-
-
 
 
 -- PARTICLE --
