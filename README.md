@@ -1,4 +1,4 @@
-# Particles - Real-Time Granular Audio Processing for Norns
+# Particles _ WORK IN PROGRESS
 This script for Norns offers real-time transformation of audio input.
 
 
