@@ -78,6 +78,12 @@ Engine_Granular : CroneEngine {
 			kernel.setAmp(amp);
 		});
 
+		this.addCommand(\feedback, "f", { arg msg;
+			var feedback = msg[1].asFloat;
+			kernel.setFeedback(feedback);
+		});
+
+
 		// Additional VME related commands
 		this.addCommand(\bitDepth, "f", { arg msg;
 			var bitDepth = msg[1].asFloat;
@@ -88,6 +94,8 @@ Engine_Granular : CroneEngine {
 			var sampleRate = msg[1].asFloat;
 			kernel.setVMESampleRate(sampleRate);
 		});
+
+		
 
 		this.addCommand(\drive, "f", { arg msg;
 			var drive = msg[1].asFloat;
@@ -103,6 +111,12 @@ Engine_Granular : CroneEngine {
 			var vmeMix = msg[1].asFloat;
 			kernel.setVMEMix(vmeMix);
 		});
+
+		this.addCommand(\resetPointer, "f", { arg msg;
+			kernel.resetPointer;
+		});
+
+
 
 		// debugPrinter = { loop { [context.server.peakCPU, context.server.avgCPU].postln; 3.wait; } }.fork;
 	}

@@ -11,7 +11,7 @@ local total_screens = 4
 
 function init()
   pre_init_monitor_level = params:get('monitor_level') -- store 'monitor' level
-  params:set('monitor_level', 0) -- mute 'monitor' level
+  params:set('monitor_level', 0)                       -- mute 'monitor' level
 
   init_params()
   init_timers()
@@ -27,7 +27,7 @@ function init_timers()
     function()
       system:addParticle(64, 32)
       screen_dirty = true
-    end, 1 / (FRAMES_PER_SECOND/ 4))
+    end, 1 / (FRAMES_PER_SECOND / 4))
   particle_timer:start()
 
   redraw_timer = metro.init(
@@ -46,7 +46,7 @@ function init_timers()
     function()
       update_arc_display()
     end,
-    1 / (FRAMES_PER_SECOND/4)
+    1 / (60)
   )
   arc_timer:start()
 end
@@ -56,11 +56,17 @@ end
 function init_params()
   params:add_separator('header', 'engine controls')
 
-  add_param('amp', 'Amplitude', 0, 12, 4)
-  add_param('buffer', 'Buffer', 0, 5, 1, 1)
-  add_param('pos', 'Position', 0, 1, 0.5)
+  add_param('amp', 'Amplitude', 0, 40, 4)
+  params:add_control("buffer", "Buffer", controlspec.new(0, 5, 'lin', 1, 1))
+  params:set_action('buffer', function(x)
+    engine.resetPointer()
+    engine.buffer(x)
+  end)
+
+
+  add_param('feedback', 'Feedback', 0, 1, 0.5)
   add_param('dur', 'Duration', 0.05, 3, 0.4)
-  add_param('dens', 'Density', 0, 20, 10, 0.1)
+  add_param('dens', 'Density', 0, 15, 10, 0.1)
   add_param('jitter', 'Jitter', 0, 1, 1)
   add_param('triggerType', 'Trigger Type', 0, 1, 0, 1)
   add_param('rate', 'Rate', 0, 2, 1, 0.5)
@@ -75,13 +81,13 @@ function init_params()
 
   params:add_separator('header', 'vintage sampler')
 
-  add_param('bitDepth', 'Bit Depth', 8, 24, 24)              -- Adjust the range if needed
-  add_param('sampleRate', 'Sample Rate', 5000, 48000, 48000,1, 'exp') -- Adjust the range if needed
-  add_param('drive', 'Drive', 0.02, 1, 1)                    -- Adjust the range if needed
+  add_param('bitDepth', 'Bit Depth', 8, 24, 24)                        -- Adjust the range if needed
+  add_param('sampleRate', 'Sample Rate', 5000, 48000, 48000, 1, 'exp') -- Adjust the range if needed
+  add_param('drive', 'Drive', 0.02, 1, 1)                              -- Adjust the range if needed
   add_param('vmeMix', 'VME Mix', 0, 1, 0)
 
   params:add_separator('header', 'ARC + General')
- 
+
   params:add_control("arc_sens_1", "Arc Sensitivity 1", controlspec.new(0.01, 2, 'lin', 0.01, 0.2))
   params:add_control("arc_sens_2", "Arc Sensitivity 2", controlspec.new(0.01, 2, 'lin', 0.01, 0.2))
   params:add_control("arc_sens_3", "Arc Sensitivity 3", controlspec.new(0.01, 2, 'lin', 0.01, 0.2))
@@ -95,7 +101,7 @@ end
 
 function add_param(id, name, min, max, default, quant, warp)
   warp = warp or 'lin'  -- Default to linear if warp is not specified
-  quant = quant or 0.01  -- Use the provided quant value or default to 0.01
+  quant = quant or 0.01 -- Use the provided quant value or default to 0.01
   params:add_control(
     id,                 -- ID
     name,               -- display name
@@ -135,9 +141,9 @@ function enc(n, d)
     if n == 1 then
       params:delta('amp', d)
     elseif n == 2 then
-      params:delta('rate', d) -- Update 'rate' parameter instead of 'pos'
+      params:delta('rate', d)
     elseif n == 3 then
-      params:delta('pos', d)
+      params:delta('feedback', d)
     end
   elseif selected_screen == 3 then
     -- Mapping for screen 3
@@ -187,27 +193,27 @@ function drawParamValues()
   local selected_screen = params:get("selected_screen")
   all_screen_params = {
     {
-      {key = 'dens', label = "DENSITY", value = params:get('dens'), format = "%.0f", y = 25},
-      {key = 'dur', label = "DURATION", value = params:get('dur'), format = "%.2f", y = 35},
-      {key = 'buffer', label = "BUFFER", value = params:get('buffer'), format = "%.0f", y = 45}
+      { key = 'dens',   label = "DENSITY",  value = params:get('dens'),   format = "%.0f", y = 25 },
+      { key = 'dur',    label = "DURATION", value = params:get('dur'),    format = "%.2f", y = 35 },
+      { key = 'buffer', label = "BUFFER",   value = params:get('buffer'), format = "%.0f", y = 45 }
     },
     {
-      {key = 'amp', label = "AMP", value = params:get('amp'), format = "%.0f", y = 25},
-      {key = 'rate', label = "RATE", value = params:get('rate'), format = "%.2f", y = 35},
-      {key = 'pos', label = "POSITION", value = params:get('pos'), format = "%.2f", y = 45}
+      { key = 'amp',      label = "AMP",      value = params:get('amp'),      format = "%.0f", y = 25 },
+      { key = 'rate',     label = "RATE",     value = params:get('rate'),     format = "%.2f", y = 35 },
+      { key = 'feedback', label = "FEEDBACK", value = params:get('feedback'), format = "%.2f", y = 45 }
     },
     {
-      {key = 'depth', label = "WOBBLE", value = params:get('depth'), format = "%.2f", y = 25},
-      {key = 'mix', label = "MIX", value = params:get('mix'), format = "%.2f", y = 35},
-      {key = 'cutoffFreq', label = "CUTOFF", value = params:get('cutoffFreq'), format = "%.2f", y = 45}
+      { key = 'depth',      label = "WOBBLE", value = params:get('depth'),      format = "%.2f", y = 25 },
+      { key = 'mix',        label = "MIX",    value = params:get('mix'),        format = "%.2f", y = 35 },
+      { key = 'cutoffFreq', label = "CUTOFF", value = params:get('cutoffFreq'), format = "%.2f", y = 45 }
     },
     {
-      {key = 'bitDepth', label = "BIT DEPTH", value = params:get('bitDepth'), format = "%.0f", y = 25},
-      {key = 'sampleRate', label = "SAMPLE RATE", value = params:get('sampleRate'), format = "%.0f", y = 35},
-      {key = 'vmeMix', label = "VME MIX", value = params:get('vmeMix'), format = "%.2f", y = 45}
+      { key = 'bitDepth',   label = "BIT DEPTH",   value = params:get('bitDepth'),   format = "%.0f", y = 25 },
+      { key = 'sampleRate', label = "SAMPLE RATE", value = params:get('sampleRate'), format = "%.0f", y = 35 },
+      { key = 'vmeMix',     label = "VME MIX",     value = params:get('vmeMix'),     format = "%.2f", y = 45 }
     }
   }
-  
+
   screenParams = all_screen_params[selected_screen]
 
   drawScreenIndicator(selected_screen, total_screens)
@@ -258,13 +264,13 @@ end
 function drawScreenIndicator(selected, total)
   local squareWidth = 4
   local spacing = 6
-  local totalWidth = (squareWidth * total) + (spacing * (total -spacing/2))
-  local xBase = (128 - totalWidth) / 2  -- Center the entire group of squares
+  local totalWidth = (squareWidth * total) + (spacing * (total - spacing / 2))
+  local xBase = (128 - totalWidth) / 2 -- Center the entire group of squares
 
-  local yPosition = 58  -- Position below the parameter text
+  local yPosition = 58                 -- Position below the parameter text
 
   for i = 1, total do
-    screen.level(i == selected and 15 or 1)  -- Highlight the selected screen
+    screen.level(i == selected and 15 or 1) -- Highlight the selected screen
     local xPosition = xBase + (i - 1) * spacing
     screen.rect(xPosition, yPosition, squareWidth, squareWidth)
     screen.fill()
@@ -279,7 +285,6 @@ end
 function cleanup()
   params:set('monitor_level', pre_init_monitor_level) -- restore 'monitor' level
 end
-
 
 -- ARC
 function a.delta(n, d)
@@ -311,7 +316,7 @@ function a.delta(n, d)
     elseif n == 2 then
       params:delta('rate', d)
     elseif n == 3 then
-      params:delta('pos', d)
+      params:delta('feedback', d)
     end
   elseif current_screen == 3 then
     -- Screen 3
@@ -343,41 +348,41 @@ function update_arc_display()
   local selected_screen = params:get("selected_screen")
   -- Example implementations for different screens
   if selected_screen == 1 then
-      -- Progress bar for linear parameters (e.g., 'dens', 'dur', 'buffer')
-      display_progress_bar(1, params:get('dens'), 0, 20)
-      display_progress_bar(2, params:get('dur'), 0.05, 3)
-      display_stepped_pattern(3, params:get('buffer'), 0, 5, 6)  -- 6 steps from 0 to 5
+    -- Progress bar for linear parameters (e.g., 'dens', 'dur', 'buffer')
+    display_progress_bar(1, params:get('dens'), 0, 15)
+    display_progress_bar(2, params:get('dur'), 0.05, 3)
+    display_stepped_pattern(3, params:get('buffer'), 0, 5, 6) -- 6 steps from 0 to 5
   elseif selected_screen == 2 then
-      -- Rotating pattern for cyclic parameters (e.g., 'amp', 'rate')
-      display_rotating_pattern(1, params:get('amp'), 0, 12)
-      display_rotating_pattern(2, params:get('rate'), 0, 2)
-      -- Blinking LED for boolean parameter (e.g., 'pos' as on/off)
-      display_progress_bar(3, params:get('pos'), 0, 1)
+    -- Rotating pattern for cyclic parameters (e.g., 'amp', 'rate')
+    display_rotating_pattern(1, params:get('amp'), 0, 40)
+    display_rotating_pattern(2, params:get('rate'), 0, 2)
+
+    display_progress_bar(3, params:get('feedback'), 0, 1)
   elseif selected_screen == 3 then
-      -- Random pattern for 'depth'
-      display_random_pattern(1, params:get('depth'), 0, 1)
-      -- Progress bar for 'mix'
-      display_progress_bar(2, params:get('mix'), 0, 1)
-      -- Rotating pattern for 'cutoffFreq'
-      display_exponential_pattern(3, params:get('cutoffFreq'), 100, 20000)
-    elseif selected_screen == 4 then
-      -- Screen 4: Vintage Sampler Parameters
-      -- Example: Use progress bars to represent 'bitDepth' and 'sampleRate'
-      display_progress_bar(1, params:get('bitDepth'), 8, 24)
-      display_exponential_pattern(2, params:get('sampleRate'), 5000, 48000)
-  
-      -- Use a different pattern (e.g., blinking LED) for 'vmeMix'
-      display_progress_bar(3, params:get('vmeMix'), 0, 1)
+    -- Random pattern for 'depth'
+    display_random_pattern(1, params:get('depth'), 0, 1)
+    -- Progress bar for 'mix'
+    display_progress_bar(2, params:get('mix'), 0, 1)
+    -- Rotating pattern for 'cutoffFreq'
+    display_exponential_pattern(3, params:get('cutoffFreq'), 100, 20000)
+  elseif selected_screen == 4 then
+    -- Screen 4: Vintage Sampler Parameters
+    -- Example: Use progress bars to represent 'bitDepth' and 'sampleRate'
+    display_progress_bar(1, params:get('bitDepth'), 8, 24)
+    display_exponential_pattern(2, params:get('sampleRate'), 5000, 48000)
+
+    -- Use a different pattern (e.g., blinking LED) for 'vmeMix'
+    display_progress_bar(3, params:get('vmeMix'), 0, 1)
   end
 
   -- Update the fourth encoder for screen selection
   for i = 1, total_screens do
-      local led_start = (i - 1) * 16 + 1
-      local led_end = i * 16
-      local brightness = i == selected_screen and 12 or 3
-      for led = led_start, led_end do
-          a:led(4, led, brightness)
-      end
+    local led_start = (i - 1) * 16 + 1
+    local led_end = i * 16
+    local brightness = i == selected_screen and 12 or 3
+    for led = led_start, led_end do
+      a:led(4, led, brightness)
+    end
   end
 
   a:refresh()
@@ -386,13 +391,13 @@ end
 function display_progress_bar(encoder, value, min, max)
   local normalized = normalize_param_value(value, min, max)
   local brightness_max = 12 -- Maximum brightness
-  local gradient_factor = 1  -- Adjust this value to control the gradient's steepness
+  local gradient_factor = 1 -- Adjust this value to control the gradient's steepness
 
   for led = 1, 64 do
     if led <= normalized then
       -- Calculate brightness based on distance from the actual value
       local distance = math.abs(normalized - led) -- Adjust this value to control the gradient's steepness
-      local brightness = math.max(1, brightness_max - (distance * gradient_factor)) 
+      local brightness = math.max(1, brightness_max - (distance * gradient_factor))
       a:led(encoder, led, brightness)
     else
       a:led(encoder, led, 0) -- LEDs beyond the value are off
@@ -403,7 +408,7 @@ end
 function display_rotating_pattern(encoder, value, min, max)
   local normalized = normalize_param_value(value, min, max)
   local start_led = (normalized % 64) + 1
-  local pattern_width = 2 -- Width of the pattern on each side of the center LED
+  local pattern_width = 2   -- Width of the pattern on each side of the center LED
   local max_brightness = 10 -- Maximum brightness
 
   for i = -pattern_width, pattern_width do
@@ -420,51 +425,51 @@ function display_stepped_pattern(encoder, value, min, max, steps)
 
   -- Add initial border if it starts from the first LED
   if leds_per_step % 1 ~= 0 then
-      a:led(encoder, 1, 8)  -- Border at the beginning
+    a:led(encoder, 1, 8) -- Border at the beginning
   end
 
   -- Light up LEDs for each step
   for s = 1, steps do
-      local start_led = math.floor((s - 1) * leds_per_step) + 1
-      local end_led = math.floor(s * leds_per_step)
+    local start_led = math.floor((s - 1) * leds_per_step) + 1
+    local end_led = math.floor(s * leds_per_step)
 
-      -- Set LEDs for the current step
-      for led = start_led, end_led do
-          if s == step then
-              a:led(encoder, led, 12)  -- Active step
-          else
-              a:led(encoder, led, 2)  -- Dim LEDs for inactive steps
-          end
+    -- Set LEDs for the current step
+    for led = start_led, end_led do
+      if s == step then
+        a:led(encoder, led, 12) -- Active step
+      else
+        a:led(encoder, led, 2)  -- Dim LEDs for inactive steps
       end
+    end
 
-      -- Add borders for each step
-      if start_led > 1 then
-          a:led(encoder, start_led - 1, 8)  -- Border at the start of each step
-      end
-      if end_led < 64 then
-          a:led(encoder, end_led + 1, 8)  -- Border at the end of each step
-      end
+    -- Add borders for each step
+    if start_led > 1 then
+      a:led(encoder, start_led - 1, 8) -- Border at the start of each step
+    end
+    if end_led < 64 then
+      a:led(encoder, end_led + 1, 8) -- Border at the end of each step
+    end
   end
 
   -- Add final border if it ends before the last LED
   if leds_per_step % 1 ~= 0 or steps * leds_per_step < 64 then
-      a:led(encoder, 64, 8)  -- Border at the end
+    a:led(encoder, 64, 8) -- Border at the end
   end
 end
 
 function display_random_pattern(encoder, value, min, max)
-    -- Normalize the value to a 0-1 range
-    local normalized_value = (value - min) / (max - min)
-    -- Invert the normalized value so that a lower value results in fewer LEDs
-    local chance = 1 - normalized_value 
+  -- Normalize the value to a 0-1 range
+  local normalized_value = (value - min) / (max - min)
+  -- Invert the normalized value so that a lower value results in fewer LEDs
+  local chance = 1 - normalized_value
 
-    for led = 1, 64 do
-        if math.random() > chance then
-            a:led(encoder, led, math.random(5, 12))
-        else
-            a:led(encoder, led, 0)  -- Turn off the LED
-        end
+  for led = 1, 64 do
+    if math.random() > chance then
+      a:led(encoder, led, math.random(5, 12))
+    else
+      a:led(encoder, led, 0) -- Turn off the LED
     end
+  end
 end
 
 function display_exponential_pattern(encoder, value, min, max)
@@ -474,16 +479,15 @@ function display_exponential_pattern(encoder, value, min, max)
 
   -- Set the LEDs
   for led = 1, 64 do
-      if led == led_position then
-          a:led(encoder, led, 15)  -- Brightest LED for the actual value
-      elseif led < led_position then
-          a:led(encoder, led, 3)   -- Active but dimmer LEDs for values less than the current value
-      else
-          a:led(encoder, led, 0)   -- Inactive LEDs
-      end
+    if led == led_position then
+      a:led(encoder, led, 15) -- Brightest LED for the actual value
+    elseif led < led_position then
+      a:led(encoder, led, 3)  -- Active but dimmer LEDs for values less than the current value
+    else
+      a:led(encoder, led, 0)  -- Inactive LEDs
+    end
   end
 end
-
 
 -- PARTICLE --
 Particle = {}

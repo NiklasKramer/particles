@@ -14,9 +14,9 @@ var <grain, <inputBus, <ptrBus, <fxBus, <inputGroup, <ptrGroup, <recGroup, <grnG
 			a = Buffer.alloc(s, s.sampleRate * 0.5, numChannels: 1);
 			b = Buffer.alloc(s, s.sampleRate * 1, numChannels: 1);
 			c = Buffer.alloc(s, s.sampleRate * 2, numChannels: 1);
-			d = Buffer.alloc(s, s.sampleRate * 4, numChannels: 1);
-			e = Buffer.alloc(s, s.sampleRate * 8, numChannels: 1);
-			f = Buffer.alloc(s, s.sampleRate * 16, numChannels: 1);
+			d = Buffer.alloc(s, s.sampleRate * 3, numChannels: 1);
+			e = Buffer.alloc(s, s.sampleRate * 5, numChannels: 1);
+			f = Buffer.alloc(s, s.sampleRate * 8, numChannels: 1);
 
 			allBuffers = [a,b,c,d,e,f];
 
@@ -25,29 +25,30 @@ var <grain, <inputBus, <ptrBus, <fxBus, <inputGroup, <ptrGroup, <recGroup, <grnG
 				arg out=0, amp=0.5, inchan=0;
 				var signal;
 				signal = SoundIn.ar(inchan);
-				// Poll.ar(Impulse.ar(1), signal, label: "Signal Amplitude");
 				signal = signal * amp;
 				Out.ar(out, signal);
 				}).add;
 
 			
+		
 			SynthDef(\rec, {
-				arg micIn=0, buf=0, pointerIn=0, fadeInTime=1, fadeOutTime=1;
-				var sig, pointer, fadeEnv;
+				arg micIn=0, buf=0, pointerIn=0, feedback=0.5;
+				var sig, pointer, existing, mixed;
 				sig = In.ar(micIn, 1);
 				pointer = In.ar(pointerIn, 1);
-				// Create a fade envelope based on the pointer position
-				fadeEnv = EnvGen.ar(Env([0, 1, 1, 0], [fadeInTime, pointer, fadeOutTime]));
-				sig = sig * fadeEnv;
-				BufWr.ar(sig, buf, pointer);
+				existing = BufRd.ar(1, buf, pointer, loop: 1);
+				mixed = ((sig * (1 - feedback)) + (existing * feedback));
+				BufWr.ar(mixed, buf, pointer);
 			}).add;
 
+		
+
 			SynthDef(\pointer, {
-				arg out=0, buf=0;
+				arg out=0, buf=0, resetTrig=0;
 				var signal;
-				signal = Phasor.ar(0,BufRateScale.kr(buf), 0, BufFrames.kr(buf));
+				signal = Phasor.ar(trig: resetTrig, rate: BufRateScale.kr(buf), start: 0, end: BufFrames.kr(buf));
 				Out.ar(out, signal);
-				}).add;
+			}).add;
 
 
 
@@ -84,41 +85,38 @@ var <grain, <inputBus, <ptrBus, <fxBus, <inputGroup, <ptrGroup, <recGroup, <grnG
 			}).add;
 
 
-			// BufGrain
-
+			// BufGrain			
 			SynthDef(\bufGrain, {
-				arg out, sndbuf, rate=1, dur=1, pos=0.0, dens=10, amp=0.7, release=0.5, jitter=1, gate=1, envbuf=(-1), phasorFreq=0.5, triggerType=0, pointerIn=0;
-				var sound, leveled, outputEnv, posModulation, triggerSignal, ptrValue, adjustedPos, tolerance, isEqual, adjustedModulation;
+				arg out=0, sndbuf, rate=1.5, dur=1, pos=0.0, dens=10, amp=0.7, release=0.5, jitter=1, gate=1, envbuf=(-1), triggerType=0, pointerIn=0;
+				var sound, leveled, outputEnv, triggerSignal, ptrValue, threshold, shouldGenerateSound;
+				var randomPosition, distanceToHead, adjustedThreshold;
 
-				ptrValue = In.ar(pointerIn, 1)/BufFrames.kr(sndbuf); // Receive the current pointer position
+				// Receive the current pointer position, scaled by buffer length
+				ptrValue = In.ar(pointerIn, 1) / BufFrames.kr(sndbuf);
 
-				// Adjust the position based on the playback rate
-				adjustedPos = ptrValue * rate;
-				adjustedPos = adjustedPos.wrap(0, 1); // Ensure the position stays within bounds
+				// Dynamically adjust the threshold based on the rate to avoid triggering grains too close to the recording head
+				adjustedThreshold = (1 - rate.abs).abs * 0.05 + 0.01; // Example adjustment, tweak as needed
+				// Poll.ar(Impulse.ar(10), adjustedThreshold, label: "Adjusted Threshold");
 
-				// Define a tolerance for comparison
-				tolerance = 0.0001;
+				// Generate a random position ensuring it's not too close to the recording head
+				randomPosition = LFNoise1.kr(2).wrap(0, 1);
+				distanceToHead = abs(ptrValue - randomPosition);
 
-				// Modulate position with jitter and ensure it's within bounds
-				posModulation = (pos + (LFNoise1.kr([1,1]) * jitter)).clip(0, 1);
+				// Only generate sound if the distance to the recording head is beyond the adjusted threshold
+				shouldGenerateSound = distanceToHead > adjustedThreshold;
+				// Poll.ar(Impulse.ar(10), shouldGenerateSound, label: "Should Generate Sound");
 
-				// Check if posModulation and adjustedPos are approximately equal
-				isEqual = (posModulation - adjustedPos).abs() < tolerance;
+				// Grain triggering signal, choosing between Dust and Impulse using Select
+				triggerSignal = Select.ar(triggerType, [Dust.ar(dens * shouldGenerateSound), Impulse.ar(dens * shouldGenerateSound)]);
 
-				// Adjust posModulation based on the equality check
-				adjustedModulation = Select.kr(isEqual, [posModulation + tolerance, posModulation]);
-				adjustedModulation = adjustedModulation.clip(0, 1);
-
-				// Choose between Dust and Impulse based on triggerType
-				triggerSignal = Select.ar(triggerType, [Dust.ar(dens), Impulse.ar(dens)]);
-
+				// Generate sound only if shouldGenerateSound is true
 				sound = GrainBuf.ar(
 					numChannels: 2,
 					trigger: triggerSignal,
-					dur: [dur, dur - 0.01],
+					dur: [dur, dur - 0.01], // Slight variation in duration for stereo spread
 					sndbuf: sndbuf,
 					rate: rate,
-					pos: adjustedModulation,
+					pos: randomPosition,
 					interp: 2,
 					pan: 0,
 					envbufnum: envbuf,
@@ -224,8 +222,8 @@ init {
 // ~winenv = Env.adsr(attackTime: 0, decayTime: 0.01, sustainLevel: 0.00, releaseTime: 0.0);
 	// ~z = Buffer.sendCollection(s, ~winenv.asArray, 1);
 
-	soundGood = Synth(\soundGood,[\in, ~fx3Bus, \out, 0]);
-	wobble = Synth(\wobble,[\in: ~fx2Bus, out: ~fx3Bus ]);
+	// soundGood = Synth(\soundGood,[\in, ~fx3Bus, \out, 0]);
+	wobble = Synth(\wobble,[\in: ~fx2Bus, out: 0 ]);
 	vme = Synth(\vintageSamplerEmu,[\in: ~fx1Bus, out:~fx2Bus ]);
 
 	grain = Synth.new(\bufGrain, [ \rate, 1, \sndbuf, b, \out, ~fx1Bus, \amp, 1, \pointerIn, ~ptrBus]);
@@ -255,6 +253,10 @@ setRate { arg rate;
 
 setPos { arg pos;
 	grain.set(\pos, pos);
+}
+
+setFeedback { arg feedback;
+	record.set(\feedback, feedback);
 }
 
 setAmp { arg amp;
@@ -315,10 +317,16 @@ setVMECutoffFreq { arg cutoffFreq;
 setVMEMix { arg mix;
 	vme.set(\mix, mix);
 }
+resetPointer {
+	pointer.set(\resetTrig, 1);  
+}
 
 // IMPORTANT!
 // free our synth after we're done with it:
 free {
+
+	"Free Method called".postln;
+
 	grain.free;
 	wobble.free;
 	vme.free;
