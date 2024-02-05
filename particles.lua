@@ -13,8 +13,8 @@ local feedback_compensation = 0
 
 
 function init()
-  pre_init_monitor_level = params:get('monitor_level') -- store 'monitor' level
-  params:set('monitor_level', 0)                       -- mute 'monitor' level
+  pre_init_monitor_level = params:get('monitor_level')
+  params:set('monitor_level', 0)
 
   init_params()
   init_timers()
@@ -34,14 +34,14 @@ function init_timers()
   particle_timer:start()
 
   redraw_timer = metro.init(
-    function() -- what to perform at every tick
+    function()
       if screen_dirty == true then
         redraw()
         screen_dirty = false
       end
     end,
-    1 / FRAMES_PER_SECOND -- how often (15 fps)
-  -- the above will repeat forever by default
+    1 / FRAMES_PER_SECOND
+
   )
   redraw_timer:start()
 
@@ -97,9 +97,9 @@ function init_params()
 
   params:add_separator('header', 'vintage sampler')
 
-  add_param('bitDepth', 'Bit Depth', 8, 24, 24)                        -- Adjust the range if needed
-  add_param('sampleRate', 'Sample Rate', 5000, 48000, 48000, 1, 'exp') -- Adjust the range if needed
-  add_param('drive', 'Drive', 0.02, 1, 1)                              -- Adjust the range if needed
+  add_param('bitDepth', 'Bit Depth', 8, 24, 24)
+  add_param('sampleRate', 'Sample Rate', 5000, 48000, 48000, 1, 'exp')
+  add_param('drive', 'Drive', 0.02, 1, 1)
   add_param('vmeMix', 'VME Mix', 0, 1, 0)
 
   params:add_separator('header', 'ARC + General')
@@ -135,7 +135,7 @@ end
 -- BUTTONS & ENCODER --
 
 function key(n, z)
-  if z == 1 then -- Check if the button is pressed (not released)
+  if z == 1 then
     button_pressed(n)
   end
 end
@@ -299,7 +299,7 @@ function normalize_param_value(value, min, max)
 end
 
 function cleanup()
-  params:set('monitor_level', pre_init_monitor_level) -- restore 'monitor' level
+  params:set('monitor_level', pre_init_monitor_level)
   engine.free(1)
 end
 
@@ -360,39 +360,26 @@ function a.delta(n, d)
 end
 
 function update_arc_display()
-  -- Clear all LEDs on the arc
   a:all(0)
   local selected_screen = params:get("selected_screen")
-  -- Example implementations for different screens
   if selected_screen == 1 then
-    -- Progress bar for linear parameters (e.g., 'dens', 'dur', 'buffer')
     display_progress_bar(1, params:get('dens'), 0, 15)
     display_progress_bar(2, params:get('dur'), 0.05, 3)
-    display_stepped_pattern(3, params:get('buffer'), 0, 5, 6) -- 6 steps from 0 to 5
+    display_stepped_pattern(3, params:get('buffer'), 0, 5, 6)
   elseif selected_screen == 2 then
-    -- Rotating pattern for cyclic parameters (e.g., 'amp', 'rate')
     display_rotating_pattern(1, params:get('amp'), 0, 20)
     display_rotating_pattern(2, params:get('rate'), 0, 2)
-
     display_progress_bar(3, params:get('feedback'), 0, 1)
   elseif selected_screen == 3 then
-    -- Random pattern for 'depth'
     display_random_pattern(1, params:get('depth'), 0, 1)
-    -- Progress bar for 'mix'
     display_progress_bar(2, params:get('mix'), 0, 1)
-    -- Rotating pattern for 'filterControl'
-    display_exponential_pattern(3, params:get('filterControl'), 0, 1)
+    display_filter_pattern(3, params:get('filterControl'), 0, 1)
   elseif selected_screen == 4 then
-    -- Screen 4: Vintage Sampler Parameters
-    -- Example: Use progress bars to represent 'bitDepth' and 'sampleRate'
     display_progress_bar(1, params:get('bitDepth'), 8, 24)
     display_exponential_pattern(2, params:get('sampleRate'), 5000, 48000)
-
-    -- Use a different pattern (e.g., blinking LED) for 'vmeMix'
     display_progress_bar(3, params:get('vmeMix'), 0, 1)
   end
 
-  -- Update the fourth encoder for screen selection
   for i = 1, total_screens do
     local led_start = (i - 1) * 16 + 1
     local led_end = i * 16
@@ -407,17 +394,16 @@ end
 
 function display_progress_bar(encoder, value, min, max)
   local normalized = normalize_param_value(value, min, max)
-  local brightness_max = 12 -- Maximum brightness
-  local gradient_factor = 1 -- Adjust this value to control the gradient's steepness
+  local brightness_max = 12
+  local gradient_factor = 1
 
   for led = 1, 64 do
     if led <= normalized then
-      -- Calculate brightness based on distance from the actual value
-      local distance = math.abs(normalized - led) -- Adjust this value to control the gradient's steepness
+      local distance = math.abs(normalized - led)
       local brightness = math.max(1, brightness_max - (distance * gradient_factor))
       a:led(encoder, led, brightness)
     else
-      a:led(encoder, led, 0) -- LEDs beyond the value are off
+      a:led(encoder, led, 0)
     end
   end
 end
@@ -425,13 +411,13 @@ end
 function display_rotating_pattern(encoder, value, min, max)
   local normalized = normalize_param_value(value, min, max)
   local start_led = (normalized % 64) + 1
-  local pattern_width = 2   -- Width of the pattern on each side of the center LED
-  local max_brightness = 10 -- Maximum brightness
+  local pattern_width = 2
+  local max_brightness = 10
 
   for i = -pattern_width, pattern_width do
     local led = (start_led + i - 1) % 64 + 1
     local brightness = max_brightness - math.abs(i) * 3
-    brightness = math.max(brightness, 1) -- Ensure brightness is at least 1
+    brightness = math.max(brightness, 1)
     a:led(encoder, led, brightness)
   end
 end
@@ -440,69 +426,95 @@ function display_stepped_pattern(encoder, value, min, max, steps)
   local leds_per_step = 64 / steps
   local step = math.floor((value - min) / (max - min) * (steps - 1)) + 1
 
-  -- Add initial border if it starts from the first LED
   if leds_per_step % 1 ~= 0 then
-    a:led(encoder, 1, 8) -- Border at the beginning
+    a:led(encoder, 1, 8)
   end
 
-  -- Light up LEDs for each step
   for s = 1, steps do
     local start_led = math.floor((s - 1) * leds_per_step) + 1
     local end_led = math.floor(s * leds_per_step)
 
-    -- Set LEDs for the current step
     for led = start_led, end_led do
       if s == step then
-        a:led(encoder, led, 12) -- Active step
+        a:led(encoder, led, 12)
       else
-        a:led(encoder, led, 2)  -- Dim LEDs for inactive steps
+        a:led(encoder, led, 2)
       end
     end
 
-    -- Add borders for each step
     if start_led > 1 then
-      a:led(encoder, start_led - 1, 8) -- Border at the start of each step
+      a:led(encoder, start_led - 1, 8)
     end
     if end_led < 64 then
-      a:led(encoder, end_led + 1, 8) -- Border at the end of each step
+      a:led(encoder, end_led + 1, 8)
     end
   end
 
-  -- Add final border if it ends before the last LED
   if leds_per_step % 1 ~= 0 or steps * leds_per_step < 64 then
-    a:led(encoder, 64, 8) -- Border at the end
+    a:led(encoder, 64, 8)
   end
 end
 
 function display_random_pattern(encoder, value, min, max)
-  -- Normalize the value to a 0-1 range
   local normalized_value = (value - min) / (max - min)
-  -- Invert the normalized value so that a lower value results in fewer LEDs
   local chance = 1 - normalized_value
 
   for led = 1, 64 do
     if math.random() > chance then
       a:led(encoder, led, math.random(5, 12))
     else
-      a:led(encoder, led, 0) -- Turn off the LED
+      a:led(encoder, led, 0)
     end
   end
 end
 
 function display_exponential_pattern(encoder, value, min, max)
-  -- Calculate the position of the value in an exponential manner
   local normalized = (math.log(value) - math.log(min)) / (math.log(max) - math.log(min))
   local led_position = math.floor(normalized * 64)
 
   -- Set the LEDs
   for led = 1, 64 do
     if led == led_position then
-      a:led(encoder, led, 15) -- Brightest LED for the actual value
+      a:led(encoder, led, 15)
     elseif led < led_position then
-      a:led(encoder, led, 3)  -- Active but dimmer LEDs for values less than the current value
+      a:led(encoder, led, 3)
     else
-      a:led(encoder, led, 0)  -- Inactive LEDs
+      a:led(encoder, led, 0)
     end
+  end
+end
+
+function display_filter_pattern(encoder, value, min, max)
+  local total_leds = 64
+  local midpoint_led = total_leds / 2 + 1        -- LED 33 is the top center
+  local normalized = (value - min) / (max - min) -- Normalize value to [0, 1]
+  local brightness = 5
+
+  for led = 1, total_leds do
+    a:led(encoder, led, 0)
+  end
+
+  if value <= 0.5 then
+    local active_leds_each_side = math.floor(normalized * 2 * midpoint_led)
+    for i = 0, active_leds_each_side - 1 do
+      a:led(encoder, (midpoint_led - i - 1) % total_leds + 1, brightness) -- Left side
+      a:led(encoder, (midpoint_led + i - 1) % total_leds + 1, brightness) -- Right side
+    end
+  else
+    local inactive_leds_each_side = math.floor((normalized - 0.5) * 2 * midpoint_led)
+    for i = 0, midpoint_led - inactive_leds_each_side - 1 do
+      a:led(encoder, (1 + i - 1) % total_leds + 1, brightness)
+      a:led(encoder, (total_leds - i - 1) % total_leds + 1, brightness)
+    end
+  end
+
+  if value == max then
+    a:led(encoder, midpoint_led, 15)
+  elseif value == min then
+    a:led(encoder, 1, 15)
+  else
+    a:led(encoder, 1, 15)
+    a:led(encoder, midpoint_led, 15)
   end
 end
 
@@ -511,10 +523,8 @@ Particle = {}
 Particle.__index = Particle
 
 function Particle:new(x, y)
-  local baseDurationInSeconds = params:get('dur') -- Get the base duration in seconds
+  local baseDurationInSeconds = params:get('dur')  -- Get the base duration in seconds
   local baseLifespanInFrames = baseDurationInSeconds * FRAMES_PER_SECOND
-
-  -- Random offset in frames. Assuming a maximum of 1 second of randomness:
   local randomOffsetInSeconds = math.random(-1, 1) -- Random offset in seconds
   local randomOffsetInFrames = randomOffsetInSeconds * FRAMES_PER_SECOND
 
@@ -531,15 +541,12 @@ function Particle:new(x, y)
 end
 
 function Particle:update()
-  -- Randomly adjust velocities with floating-point numbers
-  self.vx = self.vx + (math.random(-25, 25) / 100) -- Smaller range
-  self.vy = self.vy + (math.random(-25, 25) / 100) -- Smaller range
+  self.vx = self.vx + (math.random(-25, 25) / 100)
+  self.vy = self.vy + (math.random(-25, 25) / 100)
 
-  -- Update position
   self.x = self.x + self.vx * 0.3
   self.y = self.y + self.vy * 0.3
 
-  -- Update lifespan
   self.lifespan = self.lifespan - 1
 end
 
@@ -548,17 +555,13 @@ function Particle:isDead()
 end
 
 function Particle:draw()
-  -- Calculate brightness based on lifespan
-  local maxLifespan = 60 -- Adjust this to the maximum possible lifespan
+  local maxLifespan = 60
   local brightness = math.max(1, math.floor((self.lifespan / maxLifespan) * 15))
 
-  -- Reduce overall brightness if needed
-  local brightnessReductionFactor = 1 -- Reduce brightness by 50%
+  local brightnessReductionFactor = 1
   brightness = math.max(1, math.floor(brightness * brightnessReductionFactor))
 
   screen.level(brightness)
-
-  -- Draw the particle
   screen.circle(self.x, self.y, self.size)
   screen.fill()
 end
@@ -578,7 +581,7 @@ end
 
 function ParticleSystem:addParticle(x, y)
   local density = params:get('dens')
-  if #self.particles < density then -- MAX_PARTICLES is a constant you define
+  if #self.particles < density then
     local randomX = x + math.random(-5, 5)
     local randomY = y + math.random(-5, 5)
     table.insert(self.particles, Particle:new(randomX, randomY))
@@ -596,9 +599,7 @@ function ParticleSystem:update()
 end
 
 function ParticleSystem:draw()
-  -- screen.clear()
   for _, p in ipairs(self.particles) do
     p:draw()
   end
-  -- screen.update()
 end
