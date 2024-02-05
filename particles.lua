@@ -7,6 +7,9 @@ local FRAMES_PER_SECOND = 120
 local pre_init_monitor_level;
 local total_screens = 4
 
+-- INIT --
+local feedback_compensation = 0
+
 
 
 function init()
@@ -56,18 +59,32 @@ end
 function init_params()
   params:add_separator('header', 'engine controls')
 
-  add_param('amp', 'Amplitude', 0, 40, 4)
+  params:add_control('amp', 'Amplitude', controlspec.new(0, 20, 'lin', 0.1, 4))
+  params:set_action('amp', function(x)
+    if x == 0 then
+      engine.amp(0)
+    else
+      engine.amp(x + feedback_compensation)
+    end
+  end)
+
   params:add_control("buffer", "Buffer", controlspec.new(0, 5, 'lin', 1, 1))
   params:set_action('buffer', function(x)
-    engine.resetPointer()
+    engine.resetPointer(1)
     engine.buffer(x)
   end)
 
 
-  add_param('feedback', 'Feedback', 0, 1, 0.5)
+  params:add_control('feedback', 'Feedback', controlspec.new(0, 1, 'lin', 0.01, 0.5))
+  params:set_action('feedback', function(x)
+    engine.feedback(x)
+    feedback_compensation = x * 10
+    engine.amp(params:get('amp') + feedback_compensation)
+  end)
+
   add_param('dur', 'Duration', 0.05, 3, 0.4)
   add_param('dens', 'Density', 0, 15, 10, 0.1)
-  add_param('jitter', 'Jitter', 0, 1, 1)
+  add_param('spread', 'Spread', 0, 1, 0)
   add_param('triggerType', 'Trigger Type', 0, 1, 0, 1)
   add_param('rate', 'Rate', 0, 2, 1, 0.5)
 
@@ -75,9 +92,8 @@ function init_params()
 
   add_param('depth', 'Depth', 0, 1, 0.02)
   add_param('mix', 'Mix', 0, 1, 1)
+  add_param('filterControl', 'Filter', 0, 1, 0.5, 0.01)
 
-  params:add_separator('header', 'filter')
-  add_param('cutoffFreq', 'Cutoff Frequency', 100, 20000, 20000, 0.5, 'exp')
 
   params:add_separator('header', 'vintage sampler')
 
@@ -152,7 +168,7 @@ function enc(n, d)
     elseif n == 2 then
       params:delta('mix', d)
     elseif n == 3 then
-      params:delta('cutoffFreq', d) -- Update 'cutoffFreq' parameter instead of 'jitter'
+      params:delta('filterControl', d)
     end
   elseif selected_screen == 4 then
     -- Mapping for screen 4
@@ -203,9 +219,9 @@ function drawParamValues()
       { key = 'feedback', label = "FEEDBACK", value = params:get('feedback'), format = "%.2f", y = 45 }
     },
     {
-      { key = 'depth',      label = "WOBBLE", value = params:get('depth'),      format = "%.2f", y = 25 },
-      { key = 'mix',        label = "MIX",    value = params:get('mix'),        format = "%.2f", y = 35 },
-      { key = 'cutoffFreq', label = "CUTOFF", value = params:get('cutoffFreq'), format = "%.2f", y = 45 }
+      { key = 'depth',         label = "WOBBLE", value = params:get('depth'),         format = "%.2f", y = 25 },
+      { key = 'mix',           label = "MIX",    value = params:get('mix'),           format = "%.2f", y = 35 },
+      { key = 'filterControl', label = "FILTER", value = params:get('filterControl'), format = "%.2f", y = 45 }
     },
     {
       { key = 'bitDepth',   label = "BIT DEPTH",   value = params:get('bitDepth'),   format = "%.0f", y = 25 },
@@ -284,6 +300,7 @@ end
 
 function cleanup()
   params:set('monitor_level', pre_init_monitor_level) -- restore 'monitor' level
+  engine.free(1)
 end
 
 -- ARC
@@ -325,7 +342,7 @@ function a.delta(n, d)
     elseif n == 2 then
       params:delta('mix', d)
     elseif n == 3 then
-      params:delta('cutoffFreq', d)
+      params:delta('filterControl', d)
     end
   elseif current_screen == 4 then
     -- Screen 4
@@ -354,7 +371,7 @@ function update_arc_display()
     display_stepped_pattern(3, params:get('buffer'), 0, 5, 6) -- 6 steps from 0 to 5
   elseif selected_screen == 2 then
     -- Rotating pattern for cyclic parameters (e.g., 'amp', 'rate')
-    display_rotating_pattern(1, params:get('amp'), 0, 40)
+    display_rotating_pattern(1, params:get('amp'), 0, 20)
     display_rotating_pattern(2, params:get('rate'), 0, 2)
 
     display_progress_bar(3, params:get('feedback'), 0, 1)
@@ -363,8 +380,8 @@ function update_arc_display()
     display_random_pattern(1, params:get('depth'), 0, 1)
     -- Progress bar for 'mix'
     display_progress_bar(2, params:get('mix'), 0, 1)
-    -- Rotating pattern for 'cutoffFreq'
-    display_exponential_pattern(3, params:get('cutoffFreq'), 100, 20000)
+    -- Rotating pattern for 'filterControl'
+    display_exponential_pattern(3, params:get('filterControl'), 0, 1)
   elseif selected_screen == 4 then
     -- Screen 4: Vintage Sampler Parameters
     -- Example: Use progress bars to represent 'bitDepth' and 'sampleRate'
