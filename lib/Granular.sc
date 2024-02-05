@@ -1,5 +1,5 @@
 Granular {
-classvar a,b,c,d,e,f, allBuffers;
+classvar a,b,c,d,e,f,aa,bb,cc,dd,ee,ff, allLeftBuffers, allRightBuffers;
 
 // instantiate variables here
 var <grain, <inputBus, <ptrBus, <fxBus, <inputGroup, <ptrGroup, <recGroup, <grnGroup, <fxGroup, <input, <record, <soundGood, <wobble, <vme, <grain, <pointer;
@@ -12,16 +12,30 @@ var <grain, <inputBus, <ptrBus, <fxBus, <inputGroup, <ptrGroup, <recGroup, <grnG
 		// we need to make sure the server is running before asking it to do anything
 		s.waitForBoot {
 			a = Buffer.alloc(s, s.sampleRate * 0.5, numChannels: 1);
+			aa = Buffer.alloc(s, s.sampleRate * 0.5, numChannels: 1);
+
 			b = Buffer.alloc(s, s.sampleRate * 1, numChannels: 1);
+			bb = Buffer.alloc(s, s.sampleRate * 1, numChannels: 1);
+
 			c = Buffer.alloc(s, s.sampleRate * 2, numChannels: 1);
+			cc = Buffer.alloc(s, s.sampleRate * 2, numChannels: 1);
+
 			d = Buffer.alloc(s, s.sampleRate * 3, numChannels: 1);
+			dd = Buffer.alloc(s, s.sampleRate * 3, numChannels: 1);
+
 			e = Buffer.alloc(s, s.sampleRate * 5, numChannels: 1);
+			ee = Buffer.alloc(s, s.sampleRate * 5, numChannels: 1);
+
 			f = Buffer.alloc(s, s.sampleRate * 8, numChannels: 1);
+			ff = Buffer.alloc(s, s.sampleRate * 8, numChannels: 1);
 
-			allBuffers = [a,b,c,d,e,f];
+			allLeftBuffers = [a,b,c,d,e,f];
+			allRightBuffers = [aa,bb,cc,dd,ee,ff];
+
+		
 
 
-			SynthDef(\input, {
+			SynthDef(\input2, {
 				arg out=0, amp=0.5, inchan=0;
 				var signal;
 				signal = SoundIn.ar(inchan);
@@ -29,16 +43,47 @@ var <grain, <inputBus, <ptrBus, <fxBus, <inputGroup, <ptrGroup, <recGroup, <grnG
 				Out.ar(out, signal);
 				}).add;
 
-			
-		
+			SynthDef(\input, {
+				arg out=0, amp=0.5, inchanL=0, inchanR=1; // Default to the first two channels for stereo input
+				var signalL, signalR, stereoSignal;
+				
+				// Capture left and right channels separately
+				signalL = SoundIn.ar(inchanL);
+				signalR = SoundIn.ar(inchanR);
+				
+				// Apply amplitude scaling
+				signalL = signalL * amp;
+				signalR = signalR * amp;
+				
+				// Combine into a stereo signal
+				stereoSignal = [signalL, signalR];
+				
+				// Output the stereo signal
+				Out.ar(out, stereoSignal);
+			}).add;
+
+
 			SynthDef(\rec, {
-				arg micIn=0, buf=0, pointerIn=0, feedback=0.5;
-				var sig, pointer, existing, mixed;
-				sig = In.ar(micIn, 1);
+				arg micInLeft=0, micInRight=1, leftBuf=0, rightBuf=0, pointerIn=0, feedback=0.5;
+				var sigLeft, sigRight, pointer, existingLeft, existingRight, mixedLeft, mixedRight;
+				
+				// Read stereo input
+				sigLeft = In.ar(micInLeft, 1);
+				sigRight = In.ar(micInRight, 1);
+				
 				pointer = In.ar(pointerIn, 1);
-				existing = BufRd.ar(1, buf, pointer, loop: 1);
-				mixed = ((sig * (1 - feedback)) + (existing * feedback));
-				BufWr.ar(mixed, buf, pointer);
+				
+				// Read existing content from buffers
+				existingLeft = BufRd.ar(1, leftBuf, pointer, loop: 1);
+				existingRight = BufRd.ar(1, rightBuf, pointer, loop: 1);
+				
+				// Mix incoming signal with existing content
+				mixedLeft = ((sigLeft * (1 - feedback)) + (existingLeft * feedback));
+				mixedRight = ((sigRight * (1 - feedback)) + (existingRight * feedback));
+				
+				// Write mixed signals back to buffers
+				BufWr.ar(mixedLeft, leftBuf, pointer);
+				BufWr.ar(mixedRight, rightBuf, pointer);
 			}).add;
 
 		
@@ -85,69 +130,83 @@ var <grain, <inputBus, <ptrBus, <fxBus, <inputGroup, <ptrGroup, <recGroup, <grnG
 			}).add;
 
 
-			// BufGrain			
+
 			SynthDef(\bufGrain, {
-				arg out=0, sndbuf, rate=1.5, dur=1, pos=0.0, dens=10, amp=0.7, release=0.5, jitter=1, gate=1, envbuf=(-1), triggerType=0, pointerIn=0;
-				var sound, leveled, outputEnv, triggerSignal, ptrValue, threshold, shouldGenerateSound;
-				var randomPosition, distanceToHead, adjustedThreshold;
+				arg out=0, leftSndBuf, rightSndBuf, rate=1.5, dur=1, pos=0.0, dens=10, amp=0.7, spread=0, release=0.5, jitter=1, gate=1, envbuf=(-1), triggerType=0, pointerIn=0;
+				var soundLeft, soundRight, triggerSignal, env, ptrValue, shouldGenerateSound;
+				var randomPosition, distanceToHead, threshold;
 
-				// Receive the current pointer position, scaled by buffer length
-				ptrValue = In.ar(pointerIn, 1) / BufFrames.kr(sndbuf);
+				ptrValue = In.ar(pointerIn, 1) / BufFrames.kr(leftSndBuf);
 
-				// Dynamically adjust the threshold based on the rate to avoid triggering grains too close to the recording head
-				adjustedThreshold = (1 - rate.abs).abs * 0.05 + 0.01; // Example adjustment, tweak as needed
-				// Poll.ar(Impulse.ar(10), adjustedThreshold, label: "Adjusted Threshold");
+				threshold = (1 - rate.abs).abs * 0.05 + 0.05; 
 
-				// Generate a random position ensuring it's not too close to the recording head
 				randomPosition = LFNoise1.kr(2).wrap(0, 1);
 				distanceToHead = abs(ptrValue - randomPosition);
 
-				// Only generate sound if the distance to the recording head is beyond the adjusted threshold
-				shouldGenerateSound = distanceToHead > adjustedThreshold;
-				// Poll.ar(Impulse.ar(10), shouldGenerateSound, label: "Should Generate Sound");
+				shouldGenerateSound = distanceToHead > threshold;
 
-				// Grain triggering signal, choosing between Dust and Impulse using Select
+				
+
 				triggerSignal = Select.ar(triggerType, [Dust.ar(dens * shouldGenerateSound), Impulse.ar(dens * shouldGenerateSound)]);
-
-				// Generate sound only if shouldGenerateSound is true
-				sound = GrainBuf.ar(
-					numChannels: 2,
+				// Generate grains for left channel
+				soundLeft = GrainBuf.ar(
+					numChannels: 1,
 					trigger: triggerSignal,
-					dur: [dur, dur - 0.01], // Slight variation in duration for stereo spread
-					sndbuf: sndbuf,
+					dur: dur,
+					sndbuf: leftSndBuf, // Use left channel mono buffer
 					rate: rate,
 					pos: randomPosition,
 					interp: 2,
-					pan: 0,
-					envbufnum: envbuf,
+					pan: -1,
+					envbufnum: envbuf
 				);
 
-				outputEnv = EnvGen.ar(Env.adsr(releaseTime: release), gate: gate, doneAction: 2);
-				leveled = sound * outputEnv * amp;
-				Out.ar(out, leveled);
+				// Generate grains for right channel
+				soundRight = GrainBuf.ar(
+					numChannels: 1,
+					trigger: triggerSignal,
+					dur: dur,
+					sndbuf: rightSndBuf, // Use right channel mono buffer
+					rate: rate,
+					pos: randomPosition + spread,
+					interp: 2,
+					pan: 1,
+					envbufnum: envbuf
+				);
+
+				env = EnvGen.ar(Env.adsr(releaseTime: release), gate: gate, doneAction: 2);
+				Out.ar(out, [(soundLeft * env * amp), (soundRight * env * amp)]);
 			}).add;
 
 
-			SynthDef(\vintageSamplerEmu, { |in=0, out=0, bitDepth=12, sampleRate=26040, drive=0.5, cutoffFreq=8000, mix=0.5|
-				var signal, bitcrushed, saturated, mixed, filtered, output;
 
-				signal = In.ar(in, 2); // Assuming stereo input
+			
+			SynthDef(\vintageSamplerEmu, { |in=0, out=0, bitDepth=12, sampleRate=26040, drive=0.5, mix=0.5, filterControl=0.5|
+				var signal, bitcrushed, saturated, mixed, filtered, cutoffFreqLPF, cutoffFreqHPF, dryAndHighPass;
 
-				// Processed signal chain
+				signal = In.ar(in, 2);
+
 				bitcrushed = Decimator.ar(signal, sampleRate, bitDepth);
 				saturated = SineShaper.ar(bitcrushed, drive);
-
 				mixed = XFade2.ar(signal, saturated, mix * 2 - 1);
 
-				// Apply the filter to the mixed signal
-				filtered = MoogFF.ar(mixed, cutoffFreq);
+				cutoffFreqLPF = LinExp.kr(filterControl.clip(0, 0.5) * 2, 0, 1, 20, 15000);
+				cutoffFreqHPF = LinExp.kr((filterControl - 0.5).clip(0, 0.5) * 2, 0, 1, 20, 15000);
 
-				// The final output signal
-				output = filtered;
+				dryAndHighPass = Select.ar(filterControl > 0.51, [
+					mixed,
+					HPF.ar(mixed, cutoffFreqHPF)
+				]);
 
-				// Output the blended signal
-				Out.ar(out, output);
+				filtered = Select.ar(filterControl > 0.5, [
+					LPF.ar(mixed, cutoffFreqLPF),
+					dryAndHighPass,
+				]);
+
+				Out.ar(out, filtered);
 			}).add;
+
+
 
 
 			~midside = {|in, msBalance=0|
@@ -202,37 +261,41 @@ var <grain, <inputBus, <ptrBus, <fxBus, <inputGroup, <ptrGroup, <recGroup, <grnG
 init {
 	var s = Server.default;
 
-	~inputBus=Bus.audio(s,1);
-	~ptrBus=Bus.audio(s,1);
-	~fx1Bus=Bus.audio(s,2);
-	~fx2Bus=Bus.audio(s,2);
-	~fx3Bus=Bus.audio(s,2);
+	~inputBus = Bus.audio(s, 2); // Changed from 1 to 2 channels for stereo
+    ~ptrBus = Bus.audio(s, 1); // Changed from 1 to 2 channels for stereo
+    ~fx1Bus = Bus.audio(s, 2); // Already stereo, but ensuring clarity
+    ~fx2Bus = Bus.audio(s, 2); // Already stereo, but ensuring clarity
+    ~fx3Bus = Bus.audio(s, 2); // Already stereo, but ensuring clarity
 
-
-	~inputGroup = Group.new();
-	~ptrGroup = Group.after(~inputGroup);
-	~recGroup = Group.after(~ptrGroup);
-	~grnGroup = Group.after(~recGroup);
+    ~inputGroup = Group.new();
+    ~ptrGroup = Group.after(~inputGroup);
+    ~recGroup = Group.after(~ptrGroup);
+    ~grnGroup = Group.after(~recGroup);
 
 
 
 	input = Synth.new(\input, [\inchan, 0, \out, ~inputBus], ~inputGroup);  //
-	record = Synth.new(\rec,[\micIn, ~inputBus, \buf, b, \pointerIn, ~ptrBus], ~recGroup);
+	record = Synth.new(\rec, [
+        \micInLeft, ~inputBus.index, // Use the first channel of the stereo bus
+        \micInRight, ~inputBus.index + 1, // Use the second channel of the stereo bus
+        \leftBuf, allLeftBuffers[0].bufnum,
+        \rightBuf, allRightBuffers[0].bufnum,
+        \pointerIn, ~ptrBus.index
+    ], ~recGroup);
 
-// ~winenv = Env.adsr(attackTime: 0, decayTime: 0.01, sustainLevel: 0.00, releaseTime: 0.0);
+	// ~winenv = Env.adsr(attackTime: 0, decayTime: 0.01, sustainLevel: 0.00, releaseTime: 0.0);
 	// ~z = Buffer.sendCollection(s, ~winenv.asArray, 1);
 
 	// soundGood = Synth(\soundGood,[\in, ~fx3Bus, \out, 0]);
-	wobble = Synth(\wobble,[\in: ~fx2Bus, out: 0 ]);
+	wobble = Synth(\wobble,[\in: ~fx2Bus, out: 0]);
 	vme = Synth(\vintageSamplerEmu,[\in: ~fx1Bus, out:~fx2Bus ]);
 
-	grain = Synth.new(\bufGrain, [ \rate, 1, \sndbuf, b, \out, ~fx1Bus, \amp, 1, \pointerIn, ~ptrBus]);
+	grain = Synth.new(\bufGrain, [ \rate, 1, \leftSndBuf, b, \rightSndBuf, bb, \out, ~fx1Bus, \amp, 1, \pointerIn, ~ptrBus]);
 	pointer = Synth.new(\pointer,[\out, ~ptrBus, \buf, b]);
 	
 	s.sync; // sync the changes above to the server
 }
 
-// create a command to control the synth's 'amp' value:
 
 
 setGate { arg gate;
@@ -241,10 +304,11 @@ setGate { arg gate;
 
 
 setBuffer { arg bufferNumber;
-	var buffer = allBuffers[bufferNumber];
-	grain.set(\sndbuf, buffer);
-	record.set(\buf, buffer);
-	pointer.set(\buf, buffer);
+    var leftBuffer = allLeftBuffers[bufferNumber];
+    var rightBuffer = allRightBuffers[bufferNumber];
+    record.set(\leftBuf, leftBuffer, \rightBuf, rightBuffer);
+	grain.set(\leftSndBuf, leftBuffer, \rightSndBuf, rightBuffer);
+	pointer.set(\buf, leftBuffer);
 }
 
 setRate { arg rate;
@@ -253,6 +317,10 @@ setRate { arg rate;
 
 setPos { arg pos;
 	grain.set(\pos, pos);
+}
+
+setSpread { arg spread;
+	grain.set(\spread, spread);
 }
 
 setFeedback { arg feedback;
@@ -309,9 +377,8 @@ setVMESampleRate { arg sampleRate;
 setVMEDrive { arg drive;
 	vme.set(\drive, drive);
 }
-
-setVMECutoffFreq { arg cutoffFreq;
-	vme.set(\cutoffFreq, cutoffFreq);
+setVMEFilterControl { arg filterControl;
+	vme.set(\filterControl, filterControl);
 }
 
 setVMEMix { arg mix;
@@ -334,13 +401,8 @@ free {
 	input.free;
 	soundGood.free;
 	pointer.free;
-	
-	a.free; 
-	b.free; 
-	c.free; 
-	d.free;
-	e.free; 
-	f.free; 
+
+
 
 	~inputBus.free;
 	~ptrBus.free;
@@ -358,7 +420,7 @@ free {
 
 	grain = nil; wobble = nil; vme = nil;
 	record = nil; input = nil; soundGood = nil; pointer = nil;
-	a = nil; b = nil; c = nil; d = nil; e = nil; f = nil;
+	
 	~inputBus = nil; ~ptrBus = nil; ~fx1Bus = nil; ~fx2Bus = nil; ~fx3Bus = nil;
 	~inputGroup = nil; ~ptrGroup = nil; ~recGroup = nil; ~grnGroup = nil;
 }
