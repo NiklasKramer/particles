@@ -18,6 +18,11 @@ Engine_Granular : CroneEngine {
 			kernel.setBuffer(buffer);
 		});
 
+		this.addCommand(\spread, "f", { arg msg;
+			var spread = msg[1].asFloat;
+			kernel.setSpread(spread);
+		});
+
 		this.addCommand(\rate, "f", { arg msg;
 			var rate = msg[1].asFloat;
 			kernel.setRate(rate);
@@ -102,9 +107,9 @@ Engine_Granular : CroneEngine {
 			kernel.setVMEDrive(drive);
 		});
 
-		this.addCommand(\cutoffFreq, "f", { arg msg;
-			var cutoffFreq = msg[1].asFloat;
-			kernel.setVMECutoffFreq(cutoffFreq);
+		this.addCommand(\filterControl, "f", { arg msg;
+			var filterControl = msg[1].asFloat;
+			kernel.setVMEFilterControl(filterControl);
 		});
 
 		this.addCommand(\vmeMix, "f", { arg msg;
@@ -113,7 +118,10 @@ Engine_Granular : CroneEngine {
 		});
 
 		this.addCommand(\resetPointer, "f", { arg msg;
-			kernel.resetPointer;
+			kernel.resetPointer();
+		});
+		this.addCommand(\freeEngine, "f", { arg msg;
+			kernel.free();
 		});
 
 
