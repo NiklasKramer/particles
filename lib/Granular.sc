@@ -35,13 +35,6 @@ var <grain, <inputBus, <ptrBus, <fxBus, <inputGroup, <ptrGroup, <recGroup, <grnG
 		
 
 
-			SynthDef(\input2, {
-				arg out=0, amp=0.5, inchan=0;
-				var signal;
-				signal = SoundIn.ar(inchan);
-				signal = signal * amp;
-				Out.ar(out, signal);
-				}).add;
 
 			SynthDef(\input, {
 				arg out=0, amp=0.5, inchanL=0, inchanR=1; // Default to the first two channels for stereo input
