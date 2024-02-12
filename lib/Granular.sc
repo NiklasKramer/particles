@@ -35,7 +35,7 @@ var <grain, <inputBus, <ptrBus, <fxBus, <inputGroup, <ptrGroup, <recGroup, <grnG
 		
 
 
-
+			
 			SynthDef(\input, {
 				arg out=0, amp=0.5, inchanL=0, inchanR=1; // Default to the first two channels for stereo input
 				var signalL, signalR, stereoSignal;
@@ -79,8 +79,7 @@ var <grain, <inputBus, <ptrBus, <fxBus, <inputGroup, <ptrGroup, <recGroup, <grnG
 				BufWr.ar(mixedRight, rightBuf, pointer);
 			}).add;
 
-		
-
+	
 			SynthDef(\pointer, {
 				arg out=0, buf=0, resetTrig=0;
 				var signal;
@@ -131,7 +130,7 @@ var <grain, <inputBus, <ptrBus, <fxBus, <inputGroup, <ptrGroup, <recGroup, <grnG
 
 				ptrValue = In.ar(pointerIn, 1) / BufFrames.kr(leftSndBuf);
 
-				threshold = (1 - rate.abs).abs * 0.05 + 0.05; 
+				threshold = 0.2; 
 
 				randomPosition = LFNoise1.kr(2).wrap(0, 1);
 				distanceToHead = abs(ptrValue - randomPosition);
