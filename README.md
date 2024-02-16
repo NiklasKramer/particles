@@ -1,4 +1,6 @@
-# Particles _ WORK IN PROGRESS
+# Particles - Norns script
+
+restart Norns after installing
 
 
 
